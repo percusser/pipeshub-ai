@@ -97,6 +97,20 @@ def _parsed_like(twin: dict[str, Any]) -> dict[str, str]:
     return {"parsingStatus": status} if status in _PARSE_DONE else {}
 
 
+def _reserialize_parsed_json(content: object) -> object:
+    """Bytes for a buffer that arrived as a parsed JSON value.
+
+    A JSON file whose whole body is a scalar (``42``, ``true``) parses to an
+    int, float or bool, not just a dict or list, and nothing downstream takes
+    those: ``len()`` raised and the record was retried until it failed.
+    """
+    if content is None or isinstance(content, (bytes, bytearray, str)):
+        return content
+    if isinstance(content, (dict, list, int, float, bool)):
+        return json.dumps(content, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return content
+
+
 def _is_code_file(mime_type: str | None, code_ext: str | None) -> bool:
     """Whether this record should be parsed as source and projected into the code graph.
 
@@ -1386,8 +1400,7 @@ class EventProcessor:
             # Python objects (dict/list) instead of raw bytes.  Serialize them back
             # to a deterministic JSON byte string so every downstream consumer
             # (MD5 hashing, parsers, service pipeline) receives bytes uniformly.
-            if isinstance(file_content, (dict, list)):
-                file_content = json.dumps(file_content, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            file_content = _reserialize_parsed_json(file_content)
 
             # The revision every stage state and record-status write for this content is tied to.
             content_rev = content_revision(
