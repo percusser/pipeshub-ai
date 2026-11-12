@@ -380,6 +380,48 @@ class TestHandleRelatedExternalRecordsEdgeDeletion:
         tx_store.batch_upsert_records.assert_awaited()
 
 
+class TestOnRelatedRecordsUpdate:
+    @pytest.mark.asyncio
+    async def test_replaces_link_edges_without_resaving_the_record(self):
+        """Local FS's Obsidian pass: edges change, the record is not upserted."""
+        proc = _make_processor()
+        tx_store = _make_tx_store()
+        proc.data_store_provider.transaction.return_value = _make_ctx(tx_store)
+        target = _make_record(external_record_id="ext-target")
+        target.id = "rec-target"
+        tx_store.get_record_by_external_id.return_value = target
+        note = _make_record()
+        note.id = "rec-note"
+        link = RelatedExternalRecord(
+            external_record_id="ext-target",
+            record_type=RecordType.FILE,
+            relation_type=RecordRelations.LINKED_TO,
+        )
+
+        await proc.on_related_records_update([(note, [link])])
+
+        tx_store.delete_edges_by_relationship_types.assert_awaited_once()
+        edges = tx_store.batch_upsert_node_relations.await_args.args[0]
+        assert [(e["_from"], e["_to"], e["relationshipType"]) for e in edges] == [
+            ("records/rec-note", "records/rec-target", RecordRelations.LINKED_TO.value)
+        ]
+        tx_store.batch_upsert_records.assert_not_awaited()
+        proc.messaging_producer.send_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_empty_list_clears_the_edges(self):
+        proc = _make_processor()
+        tx_store = _make_tx_store()
+        proc.data_store_provider.transaction.return_value = _make_ctx(tx_store)
+        note = _make_record()
+        note.id = "rec-note"
+
+        await proc.on_related_records_update([(note, [])])
+
+        tx_store.delete_edges_by_relationship_types.assert_awaited_once()
+        tx_store.batch_upsert_node_relations.assert_not_awaited()
+
+
 # ===========================================================================
 # _link_record_to_group - shared_with_me not found (line 400)
 # ===========================================================================

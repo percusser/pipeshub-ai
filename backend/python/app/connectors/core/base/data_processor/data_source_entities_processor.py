@@ -3150,6 +3150,26 @@ class DataSourceEntitiesProcessor:
 
 
     @retry_on_deadlock()
+    async def on_related_records_update(
+        self,
+        items: list[tuple[Record, list[RelatedExternalRecord]]],
+    ) -> None:
+        """Replace the link edges of records already stored, and nothing else.
+
+        For a connector that learns a record's links after saving it: Local FS
+        reads an Obsidian note's ``[[links]]`` once every note of the run is in
+        the graph, so a link to a note on a later page still resolves. Each
+        record's link edges (``LINK_RELATION_TYPES``) are replaced by the given
+        list, which may be empty. The record itself is not re-saved, so no
+        indexing event is published and its permissions are untouched.
+        """
+        for start in range(0, len(items), _RECORDS_PER_TRANSACTION):
+            batch_slice = items[start:start + _RECORDS_PER_TRANSACTION]
+            async with self._sync_transaction(explicit=True) as tx_store:
+                for record, related in batch_slice:
+                    await self._handle_related_external_records(record, related, tx_store)
+
+    @retry_on_deadlock()
     async def on_record_content_update(
         self,
         record: Record,
