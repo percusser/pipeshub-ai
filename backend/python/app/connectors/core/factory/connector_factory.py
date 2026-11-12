@@ -73,6 +73,7 @@ from app.connectors.sources.google_cloud_storage.connector import GCSConnector
 from app.connectors.sources.localKB.connector import KnowledgeBaseConnector
 from app.connectors.sources.linear.connector import LinearConnector
 from app.connectors.sources.local_fs.connector import LocalFsConnector
+from app.connectors.sources.obsidian.connector import ObsidianConnector
 from app.connectors.sources.mariadb.connector import MariaDBConnector
 from app.connectors.sources.microsoft.onedrive.connector import OneDriveConnector
 from app.connectors.sources.microsoft.outlook.connector import OutlookConnector
@@ -140,6 +141,7 @@ class ConnectorFactory:
         "web": WebConnector,
         "rss": RSSConnector,
         "localfs": LocalFsConnector,
+        "obsidian": ObsidianConnector,
         "demo": DemoConnector,
         "bookstack": BookStackConnector,
         "drupalwiki": DrupalWikiConnector,

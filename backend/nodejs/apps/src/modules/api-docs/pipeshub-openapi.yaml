@@ -5562,6 +5562,7 @@ components:
         - "UNKNOWN"
         - "RSS"
         - "LOCAL_FS"
+        - "OBSIDIAN"
         - "CODING_SANDBOX"
         - "DATABASE_SANDBOX"
         - "IMAGE_GENERATION"

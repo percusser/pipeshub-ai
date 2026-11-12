@@ -97,11 +97,15 @@ describe('libs/types/connector.types', () => {
       expect(ConnectorId.LOCAL_FS).to.equal('localfs')
     })
 
-    it('should have exactly 21 connector IDs', () => {
+    it('should have OBSIDIAN', () => {
+      expect(ConnectorId.OBSIDIAN).to.equal('obsidian')
+    })
+
+    it('should have exactly 22 connector IDs', () => {
       const values = Object.values(ConnectorId).filter(
         (v) => typeof v === 'string',
       )
-      expect(values).to.have.lengthOf(21)
+      expect(values).to.have.lengthOf(22)
     })
   })
 
@@ -126,11 +130,15 @@ describe('libs/types/connector.types', () => {
       expect(ConnectorNames.LOCAL_FS).to.equal('Local FS')
     })
 
-    it('should have exactly 21 connector names', () => {
+    it('should have OBSIDIAN as "Obsidian"', () => {
+      expect(ConnectorNames.OBSIDIAN).to.equal('Obsidian')
+    })
+
+    it('should have exactly 22 connector names', () => {
       const values = Object.values(ConnectorNames).filter(
         (v) => typeof v === 'string',
       )
-      expect(values).to.have.lengthOf(21)
+      expect(values).to.have.lengthOf(22)
     })
   })
 
@@ -162,6 +170,10 @@ describe('libs/types/connector.types', () => {
 
     it('should map localfs to Local FS', () => {
       expect(ConnectorIdToNameMap[ConnectorId.LOCAL_FS]).to.equal('Local FS')
+    })
+
+    it('should map obsidian to Obsidian', () => {
+      expect(ConnectorIdToNameMap[ConnectorId.OBSIDIAN]).to.equal('Obsidian')
     })
 
     it('should have an entry for every ConnectorId', () => {

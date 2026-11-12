@@ -855,8 +855,13 @@ def _check_connector_not_locked(instance: dict[str, Any]) -> None:
         )
 
 
+DESKTOP_FOLDER_CONNECTORS = frozenset({Connectors.LOCAL_FS.value, Connectors.OBSIDIAN.value})
+
+
 def _is_local_fs_connector_type(connector_type: str) -> bool:
-    return (connector_type or "").strip().upper().replace(" ", "_") == Connectors.LOCAL_FS.value
+    # Every connector that syncs a folder through the desktop app (Local FS and
+    # Obsidian) has an owner device and the same toggle rules.
+    return (connector_type or "").strip().upper().replace(" ", "_") in DESKTOP_FOLDER_CONNECTORS
 
 
 def _local_fs_owner_claim(

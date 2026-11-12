@@ -21,7 +21,7 @@ export interface DesktopRefusal {
  * Matches the backend identifiers: LOCAL_FS, local-fs, localfs, localfilesystem.
  */
 export function isLocalFsConnectorType(connectorType: string): boolean {
-  const normalized = connectorType.trim().replace(/[-_\s]+/g, '').toLowerCase();
+  const normalized = normalizeConnectorTypeForDesktop(connectorType);
   return (
     normalized === 'localfs' ||
     normalized === 'localfilesystem'
@@ -29,12 +29,30 @@ export function isLocalFsConnectorType(connectorType: string): boolean {
 }
 
 /**
- * Local FS settings live on the user's machine and are applied by the desktop
+ * Check if a connector type is backed by a folder the desktop app watches
+ * (Local FS and Obsidian). These share the Electron local-sync transport:
+ * folder picker, watcher bootstrap, owner-device claim, 409 refusal codes,
+ * read-only config outside Electron, and native open-record-source.
+ * Matches LOCAL_FS / local-fs / localfs / localfilesystem / OBSIDIAN / obsidian.
+ */
+export function isDesktopFolderConnectorType(connectorType: string): boolean {
+  return (
+    isLocalFsConnectorType(connectorType) ||
+    normalizeConnectorTypeForDesktop(connectorType) === 'obsidian'
+  );
+}
+
+function normalizeConnectorTypeForDesktop(connectorType: string): string {
+  return (connectorType ?? '').trim().replace(/[-_\s]+/g, '').toLowerCase();
+}
+
+/**
+ * Desktop-folder (Local FS / Obsidian) settings live on the user's machine and are applied by the desktop
  * watcher, so the browser can only show them. Callers grey out the editors
  * rather than hiding them, so a user can still read the current setup.
  */
 export function isLocalFsConfigReadOnly(connectorType: string): boolean {
-  return isLocalFsConnectorType(connectorType) && !isElectron();
+  return isDesktopFolderConnectorType(connectorType) && !isElectron();
 }
 
 const REASON_BY_CODE = new Map<string, DesktopRefusalReason>([

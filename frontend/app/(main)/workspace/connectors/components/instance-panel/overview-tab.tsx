@@ -15,7 +15,7 @@ import { ConfirmationDialog } from '@/app/(main)/workspace/components/confirmati
 import { isSyncRunning } from '../instance-card/primitives';
 import { CONNECTOR_INSTANCE_STATUS } from '../../constants';
 import { isElectron } from '@/lib/electron';
-import { isLocalFsConnectorType, localFsDesktopToast } from '../../utils/local-fs-helpers';
+import { isDesktopFolderConnectorType, localFsDesktopToast } from '../../utils/local-fs-helpers';
 import { getElectronLocalSyncStatus } from '../../utils/electron-local-sync';
 import type { IndexingStatus } from '@/app/(main)/knowledge-base/types';
 import type {
@@ -122,7 +122,7 @@ export function OverviewTab({
         variant: 'success',
         title: t('workspace.connectors.overview.refreshStatsSuccess'),
       });
-      if (isElectron() && isLocalFsConnectorType(instance.type)) {
+      if (isElectron() && isDesktopFolderConnectorType(instance.type)) {
         const status = await getElectronLocalSyncStatus(connectorId);
         if (status) {
           setLocalSyncStatus(connectorId, status);

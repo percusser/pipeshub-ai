@@ -5,7 +5,7 @@ import { CONNECTOR_INSTANCE_STATUS } from '../constants';
 import { useConnectorsStore } from '../store';
 import type { ConnectorInstance } from '../types';
 import {
-  isLocalFsConnectorType,
+  isDesktopFolderConnectorType,
   readDesktopRefusal,
   type DesktopRefusal,
 } from './local-fs-helpers';
@@ -89,7 +89,7 @@ export async function assertLocalFsRootPathAvailable(
   connectorId: string,
   connectorType: string
 ): Promise<void> {
-  if (!isLocalFsConnectorType(connectorType) || !isElectron()) return;
+  if (!isDesktopFolderConnectorType(connectorType) || !isElectron()) return;
 
   const config =
     useConnectorsStore.getState().instanceConfigs[connectorId] ??
@@ -115,7 +115,7 @@ export async function ensureLocalWatcherStarted(
   connectorId: string,
   connectorType: string
 ): Promise<void> {
-  if (!isLocalFsConnectorType(connectorType) || !isElectron()) return;
+  if (!isDesktopFolderConnectorType(connectorType) || !isElectron()) return;
   const config =
     useConnectorsStore.getState().instanceConfigs[connectorId] ??
     (await ConnectorsApi.getConnectorConfig(connectorId));
@@ -150,7 +150,7 @@ export async function prepareLocalFsForEnable(
   connectorType: string
 ): Promise<void> {
   await assertLocalFsRootPathAvailable(connectorId, connectorType);
-  if (!isLocalFsConnectorType(connectorType)) return;
+  if (!isDesktopFolderConnectorType(connectorType)) return;
   await ensureLocalWatcherStarted(connectorId, connectorType);
 }
 
@@ -160,7 +160,7 @@ export async function runConnectorResync(args: {
   fullSync?: boolean;
 }): Promise<ResyncOutcome> {
   const { connectorId, connectorType, fullSync = false } = args;
-  const localFs = isLocalFsConnectorType(connectorType);
+  const localFs = isDesktopFolderConnectorType(connectorType);
   if (localFs) {
     try {
       await ensureLocalWatcherStarted(connectorId, connectorType);
@@ -194,7 +194,7 @@ export async function toggleConnectorSyncOn(
   connectorId: string,
   connectorType?: string
 ): Promise<ResyncOutcome> {
-  const localFs = !!connectorType && isLocalFsConnectorType(connectorType);
+  const localFs = !!connectorType && isDesktopFolderConnectorType(connectorType);
   let device: { deviceId: string; deviceName: string } | undefined;
   if (localFs) {
     const info = await getElectronDeviceInfo();

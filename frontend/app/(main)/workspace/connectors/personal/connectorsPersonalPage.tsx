@@ -7,7 +7,7 @@ import { useToastStore } from '@/lib/store/toast-store';
 import { isProcessedError } from '@/lib/api';
 import { ServiceGate } from '@/app/components/ui/service-gate';
 import { isElectron } from '@/lib/electron';
-import { isLocalFsConnectorType, localFsDesktopToast } from '../utils/local-fs-helpers';
+import { isDesktopFolderConnectorType, localFsDesktopToast } from '../utils/local-fs-helpers';
 import { useConnectorsStore } from '../store';
 import { ConnectorsApi } from '../api';
 import {
@@ -224,7 +224,7 @@ function PersonalConnectorsPageContent() {
     }
 
     let cancelled = false;
-    const isLocalFs = isLocalFsConnectorType(connectorType);
+    const isLocalFs = isDesktopFolderConnectorType(connectorType);
 
     const run = async () => {
       setIsLoadingInstances(true);
@@ -271,7 +271,7 @@ function PersonalConnectorsPageContent() {
 
   const refreshInstanceDetailsForPage = useCallback(
     async (connectorId: string) => {
-      const isLocalFs = Boolean(connectorType && isLocalFsConnectorType(connectorType));
+      const isLocalFs = Boolean(connectorType && isDesktopFolderConnectorType(connectorType));
       return refreshConnectorInstanceDetails(connectorId, {
         afterConfig: isLocalFs
           ? async (fresh, config) => {
@@ -321,7 +321,7 @@ function PersonalConnectorsPageContent() {
   ]);
 
   useEffect(() => {
-    if (!isElectron() || !connectorTypeInfo || !isLocalFsConnectorType(connectorTypeInfo.type)) {
+    if (!isElectron() || !connectorTypeInfo || !isDesktopFolderConnectorType(connectorTypeInfo.type)) {
       return;
     }
 
@@ -343,7 +343,7 @@ function PersonalConnectorsPageContent() {
   // ── Handlers (list view) ───────────────────────────────────
   const handleSetup = useCallback(
     (connector: Connector) => {
-      if (isLocalFsConnectorType(connector.type) && !isElectron()) {
+      if (isDesktopFolderConnectorType(connector.type) && !isElectron()) {
         showLocalFsDesktopRequiredToast();
         return;
       }
@@ -400,7 +400,7 @@ function PersonalConnectorsPageContent() {
 
   const handleAddInstance = useCallback(() => {
     if (!connectorTypeInfo) return;
-    if (isLocalFsConnectorType(connectorTypeInfo.type) && !isElectron()) {
+    if (isDesktopFolderConnectorType(connectorTypeInfo.type) && !isElectron()) {
       showLocalFsDesktopRequiredToast();
       return;
     }
@@ -437,7 +437,7 @@ function PersonalConnectorsPageContent() {
         } else {
           await ConnectorsApi.toggleConnector(instance._key, 'sync');
         }
-        if (isLocalFsConnectorType(instance.type)) {
+        if (isDesktopFolderConnectorType(instance.type)) {
           const fresh = await refreshConnectorRowQuiet(instance._key);
           let config = instanceConfigs[instance._key];
           if (!config) {
@@ -503,7 +503,7 @@ function PersonalConnectorsPageContent() {
         addToast(localFsDesktopToast(outcome));
         return;
       }
-      if (isLocalFsConnectorType(connectorTypeInfo?.type ?? '')) {
+      if (isDesktopFolderConnectorType(connectorTypeInfo?.type ?? '')) {
         const fresh = await refreshConnectorRowQuiet(instanceId);
         let config = instanceConfigs[instanceId];
         if (!config) {

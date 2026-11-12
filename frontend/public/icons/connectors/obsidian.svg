@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Obsidian">
+  <!-- Generic faceted purple gem (original artwork). -->
+  <polygon points="20,6 44,6 58,24 32,60 6,24" fill="#6D3FD1"/>
+  <polygon points="20,6 44,6 38,24 26,24" fill="#A98BF2"/>
+  <polygon points="6,24 20,6 26,24" fill="#8A63E6"/>
+  <polygon points="58,24 44,6 38,24" fill="#7C51DE"/>
+  <polygon points="6,24 26,24 32,60" fill="#5A2FB8"/>
+  <polygon points="26,24 38,24 32,60" fill="#7B4FE0"/>
+  <polygon points="38,24 58,24 32,60" fill="#4A2399"/>
+  <polygon points="20,6 44,6 58,24 32,60 6,24" fill="none" stroke="#3B1C7A" stroke-width="1.5" stroke-linejoin="round"/>
+</svg>

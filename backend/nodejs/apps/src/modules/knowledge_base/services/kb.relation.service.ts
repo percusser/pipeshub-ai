@@ -24,8 +24,7 @@ import {
   BaseSyncEvent,
 } from './sync_events.service';
 import {
-  isLocalFsConnector,
-  LOCAL_FS_CONNECTOR_KEY,
+  desktopFolderConnectorKey,
 } from '../../../utils/local-fs-utils';
 import {
   IServiceFileRecord,
@@ -207,11 +206,12 @@ export class RecordRelationService {
   async createResyncConnectorEventPayload(
     resyncConnectorEventPayload: any,
   ): Promise<BaseSyncEvent> {
-    const connectorName = isLocalFsConnector(
-      resyncConnectorEventPayload.connectorName,
-    )
-      ? LOCAL_FS_CONNECTOR_KEY
-      : resyncConnectorEventPayload.connectorName;
+    // Desktop-folder connectors (Local FS, Obsidian) resync under their
+    // factory key; a display name like "Local FS" does not resolve there.
+    const connectorName =
+      desktopFolderConnectorKey(
+        String(resyncConnectorEventPayload.connectorName ?? ''),
+      ) ?? resyncConnectorEventPayload.connectorName;
 
     return {
       orgId: resyncConnectorEventPayload.orgId,

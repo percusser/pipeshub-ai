@@ -147,6 +147,27 @@ describe('ConnectorsCrawlingService (Local FS desktop presence)', () => {
 
   // The owner device is not resolved here: the relay routes the pull to it
   // alone, and run_sync skips quietly when it is offline.
+  ;['Obsidian', 'obsidian'].forEach((connectorName) => {
+    it(`skips Obsidian ("${connectorName}") when no desktop of the user is connected`, async () => {
+      registerDesktopPresence(makePresence(null, false));
+      const publishEvent = sinon.stub().resolves();
+
+      const result = await makeService(publishEvent).crawl(orgId, userId, scheduleConfig, connectorName, connectorId);
+
+      expect(result).to.deep.equal({ success: true });
+      expect(publishEvent.called).to.be.false;
+    });
+  });
+
+  it('publishes Obsidian when some desktop of the user is connected', async () => {
+    registerDesktopPresence(makePresence(null, true));
+    const publishEvent = sinon.stub().resolves();
+
+    await makeService(publishEvent).crawl(orgId, userId, scheduleConfig, 'Obsidian', connectorId);
+
+    expect(publishEvent.calledOnce).to.be.true;
+  });
+
   it('publishes when some desktop of the user is connected', async () => {
     const presence = makePresence(false, true);
     registerDesktopPresence(presence);

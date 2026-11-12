@@ -2,7 +2,7 @@ import { getApiBaseUrl } from '@/lib/utils/api-base-url';
 import { isElectron } from '@/lib/electron';
 import { useAuthStore } from '@/config';
 import { ConnectorsApi } from '../api';
-import { isLocalFsConnectorType } from './local-fs-helpers';
+import { isDesktopFolderConnectorType } from './local-fs-helpers';
 import type { Connector, ConnectorConfig, LocalSyncStatus } from '../types';
 
 interface LocalSyncStartPayload {
@@ -305,7 +305,7 @@ export async function startLocalWatchers(): Promise<void> {
 
   const connectors = await fetchAllPersonalConnectors();
   const localFsConnectors = connectors.filter(
-    (connector) => Boolean(connector._key) && isLocalFsConnectorType(connector.type)
+    (connector) => Boolean(connector._key) && isDesktopFolderConnectorType(connector.type)
   );
 
   // Reap first, and against *every* Local FS instance the backend knows about

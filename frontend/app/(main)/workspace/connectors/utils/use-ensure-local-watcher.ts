@@ -3,7 +3,7 @@
 import { useCallback, type MutableRefObject } from 'react';
 import { isElectron } from '@/lib/electron';
 import { useConnectorsStore } from '../store';
-import { isLocalFsConnectorType } from './local-fs-helpers';
+import { isDesktopFolderConnectorType } from './local-fs-helpers';
 import {
   buildLocalSyncStartOptionsFromConnectorConfig,
   extractLocalFsRootPath,
@@ -43,7 +43,7 @@ export function useEnsureLocalWatcher(
     async (instance, config) => {
       if (!instance._key) return;
       if (!isElectron()) return;
-      if (!isLocalFsConnectorType(instance.type)) return;
+      if (!isDesktopFolderConnectorType(instance.type)) return;
       const stopWatcher = async () => {
         await stopElectronLocalSync(instance._key);
         managedWatcherIdsRef.current.delete(instance._key);

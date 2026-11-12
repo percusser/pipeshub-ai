@@ -1,6 +1,11 @@
 import 'reflect-metadata'
 import { expect } from 'chai'
-import { isLocalFsConnector } from '../../src/utils/local-fs-utils'
+import {
+  DESKTOP_FOLDER_CONNECTOR_KEYS,
+  desktopFolderConnectorKey,
+  isDesktopFolderConnector,
+  isLocalFsConnector,
+} from '../../src/utils/local-fs-utils'
 
 describe('local-fs-utils', () => {
   describe('isLocalFsConnector', () => {
@@ -104,6 +109,65 @@ describe('local-fs-utils', () => {
         expect(isLocalFsConnector('Local FS')).to.be.a('boolean')
         expect(isLocalFsConnector('xyz')).to.be.a('boolean')
       })
+    })
+  })
+
+  describe('isLocalFsConnector stays Local-FS-only', () => {
+    ;['Obsidian', 'obsidian', 'OBSIDIAN'].forEach((name) => {
+      it(`rejects "${name}"`, () => {
+        expect(isLocalFsConnector(name)).to.equal(false)
+      })
+    })
+  })
+
+  describe('DESKTOP_FOLDER_CONNECTOR_KEYS', () => {
+    it('lists exactly localfs and obsidian', () => {
+      expect([...DESKTOP_FOLDER_CONNECTOR_KEYS]).to.deep.equal(['localfs', 'obsidian'])
+    })
+  })
+
+  describe('isDesktopFolderConnector', () => {
+    const accepted = [
+      'Local FS',
+      'localfs',
+      'LOCALFS',
+      '  local_fs  ',
+      'Obsidian',
+      'obsidian',
+      'OBSIDIAN',
+      '  Obsidian  ',
+    ]
+    accepted.forEach((name) => {
+      it(`accepts "${name}"`, () => {
+        expect(isDesktopFolderConnector(name)).to.equal(true)
+      })
+    })
+
+    const rejected = [
+      '',
+      ' ',
+      'Google Drive',
+      'Notion',
+      'Obsidian Vault',
+      'obsidianx',
+      'Local FileSystem',
+      'upload',
+    ]
+    rejected.forEach((name) => {
+      it(`rejects "${name}"`, () => {
+        expect(isDesktopFolderConnector(name)).to.equal(false)
+      })
+    })
+  })
+
+  describe('desktopFolderConnectorKey', () => {
+    it('maps display names to the canonical factory key', () => {
+      expect(desktopFolderConnectorKey('Local FS')).to.equal('localfs')
+      expect(desktopFolderConnectorKey('Obsidian')).to.equal('obsidian')
+    })
+
+    it('returns null for other connectors', () => {
+      expect(desktopFolderConnectorKey('Slack')).to.equal(null)
     })
   })
 })

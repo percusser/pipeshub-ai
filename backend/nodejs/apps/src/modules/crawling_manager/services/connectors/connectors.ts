@@ -7,7 +7,7 @@ import {
 import { SyncEventProducer } from '../../../knowledge_base/services/sync_events.service';
 import { constructSyncConnectorEvent } from '../../utils/utils';
 import { ICrawlingSchedule } from '../../schema/interface';
-import { isLocalFsConnector } from '../../../../utils/local-fs-utils';
+import { isDesktopFolderConnector } from '../../../../utils/local-fs-utils';
 import { isDesktopConnected } from '../../../../libs/services/desktop-presence.provider';
 
 @injectable()
@@ -39,7 +39,7 @@ export class ConnectorsCrawlingService implements ICrawlingTaskService {
     });
 
     try {
-      // A Local FS pull needs a desktop on the socket. Returning success (not
+      // A desktop-folder (Local FS / Obsidian) pull needs a desktop on the socket. Returning success (not
       // throwing) keeps BullMQ from retrying against a machine that is still
       // offline; unknown presence publishes as usual. Whether the *owner*
       // device is the one connected is deliberately not checked here: the job
@@ -47,10 +47,10 @@ export class ConnectorsCrawlingService implements ICrawlingTaskService {
       // ever routes the pull to the owner, and run_sync treats an offline
       // owner as a skipped sync rather than a failure.
       if (
-        isLocalFsConnector(connector) &&
+        isDesktopFolderConnector(connector) &&
         isDesktopConnected(orgId, userId) === false
       ) {
-        this.logger.info('Skipping scheduled Local FS sync: no desktop connected', {
+        this.logger.info('Skipping scheduled desktop-folder sync: no desktop connected', {
           orgId,
           userId,
           connectorId,

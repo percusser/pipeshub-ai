@@ -20,6 +20,7 @@ export enum ConnectorId {
     UPLOAD = 'upload',
     RSS = 'rss',
     LOCAL_FS = 'localfs',
+    OBSIDIAN = 'obsidian',
   }
   
   export enum ConnectorNames {
@@ -44,6 +45,7 @@ export enum ConnectorId {
     UPLOAD = 'Uploaded Files',
     RSS = 'RSS',
     LOCAL_FS = 'Local FS',
+    OBSIDIAN = 'Obsidian',
   }
   
   export const ConnectorIdToNameMap: Record<ConnectorId, string> = {
@@ -68,4 +70,5 @@ export enum ConnectorId {
     [ConnectorId.UPLOAD]: ConnectorNames.UPLOAD,
     [ConnectorId.RSS]: ConnectorNames.RSS,
     [ConnectorId.LOCAL_FS]: ConnectorNames.LOCAL_FS,
+    [ConnectorId.OBSIDIAN]: ConnectorNames.OBSIDIAN,
   };

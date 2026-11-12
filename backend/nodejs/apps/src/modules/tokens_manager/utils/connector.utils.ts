@@ -5,7 +5,7 @@ import {
 } from '../../../libs/commands/connector_service/connector.service.command';
 import { HttpMethod } from '../../../libs/enums/http-methods.enum';
 import { Response } from 'express';
-import { isLocalFsConnector } from '../../../utils/local-fs-utils';
+import { isDesktopFolderConnector } from '../../../utils/local-fs-utils';
 import {
   DesktopPresence,
   isLocalFsDeviceOnline,
@@ -132,7 +132,7 @@ export const fetchConnectorInstanceSummary = async (
 };
 
 /**
- * Why a sync on this Local FS connector must not start now, or `null` to let
+ * Why a sync on this desktop-folder (Local FS / Obsidian) connector must not start now, or `null` to let
  * it through. Presence is keyed on createdBy: the desktop registers under its
  * owner's userId, which may differ from an admin caller.
  *
@@ -144,7 +144,7 @@ export const localFsSyncRefusal = (
   instance: ConnectorInstanceSummary | null,
   options: { fallbackUserId?: string; requestDeviceId?: string } = {},
 ): DesktopRefusalReason | null => {
-  if (!instance || !isLocalFsConnector(String(instance.type ?? ''))) {
+  if (!instance || !isDesktopFolderConnector(String(instance.type ?? ''))) {
     return null;
   }
   const userId = instance.createdBy ?? options.fallbackUserId;
@@ -185,7 +185,7 @@ const annotateRow = (
   // The desktop registers under its owner's userId, which for a personal
   // connector is createdBy — not necessarily the caller (an admin may list it).
   if (!instance._key || !instance.createdBy) return;
-  if (!isLocalFsConnector(String(instance.type ?? ''))) return;
+  if (!isDesktopFolderConnector(String(instance.type ?? ''))) return;
   // Before the first enable there is no owner device to be offline.
   if (instance.isActive !== true || !instance.ownerDeviceId) return;
   const online = presence.isLocalFsDeviceOnline(
@@ -197,7 +197,7 @@ const annotateRow = (
 };
 
 /**
- * Stamp `desktopOnline` on sync-enabled Local FS rows of a Python instance
+ * Stamp `desktopOnline` on sync-enabled desktop-folder (Local FS / Obsidian) rows of a Python instance
  * response (`connector` or `connectors`). Reflects whether the owner device
  * has a socket at response time, never persisted; left absent when presence
  * is unknown, the connector is not enabled, or it has no owner device.

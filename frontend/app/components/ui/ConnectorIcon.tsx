@@ -42,6 +42,7 @@ export type ConnectorType =
   | 'azure-fileshares'
   | 'local-fs'
   | 'localfs'
+  | 'obsidian'
   | 'nextcloud'
   | 'smb'
   | 'cifs'
@@ -139,6 +140,7 @@ export const CONNECTOR_ICONS: Record<ConnectorType, { svg: string | null; fallba
   'azure-fileshares': { svg: svg('azurefiles'), fallback: 'folder_shared' },
   'local-fs': { svg: `${CONNECTOR_ICONS_BASE_PATH}/local-fs.png`, fallback: 'folder', needDarkModeInvert: true },
   'localfs': { svg: `${CONNECTOR_ICONS_BASE_PATH}/local-fs.png`, fallback: 'folder', needDarkModeInvert: true },
+  'obsidian': { svg: svg('obsidian'), fallback: 'diamond' },
   'nextcloud': { svg: svg('nextcloud'), fallback: 'cloud' },
   'smb': { svg: svg('smb'), fallback: 'folder_shared' },
   'cifs': { svg: svg('cifs'), fallback: 'folder_shared' },
@@ -227,6 +229,7 @@ const FUZZY_MATCH_RULES: Array<[string, ConnectorType]> = [
   ['azure-storage', 'azure-blob'],
   ['local-filesystem', 'local-fs'], ['local-fs', 'local-fs'], ['localfs', 'local-fs'],
   ['local-files', 'local-fs'],
+  ['obsidian', 'obsidian'],
   ['dropbox', 'dropbox'], ['box', 'box'],
   ['minio', 'minio'], ['nextcloud', 'nextcloud'],
   ['network-drive', 'smb'], ['smb3', 'smb'], ['smb2', 'smb'], ['smb', 'smb'],

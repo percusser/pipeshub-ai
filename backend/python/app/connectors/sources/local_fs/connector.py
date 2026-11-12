@@ -38,7 +38,6 @@ from app.config.constants.arangodb import (
     OriginTypes,
     PermissionModel,
     ProgressStatus,
-    RecordRelations,
 )
 from app.config.constants.http_status_code import HttpStatusCode
 from app.config.constants.service import DefaultEndpoints, config_node_constants
@@ -84,7 +83,6 @@ from app.models.entities import (
     RecordGroup,
     RecordGroupType,
     RecordType,
-    RelatedExternalRecord,
     User,
 )
 from app.models.permission import Permission
@@ -98,7 +96,6 @@ from app.utils.jwt import generate_jwt
 from app.utils.time_conversion import get_epoch_timestamp_in_ms, parse_timestamp
 from app.utils.user_messages import action_failed
 
-from .obsidian import VaultIndex, is_note, is_vault_internal, parse_links
 from .models import (
     LocalFsFileEvent,
     LocalFsFileEventBatchStats,
@@ -118,10 +115,6 @@ LOCAL_FS_MAX_PENDING_DELETIONS = 2 * FULL_SYNC_RESET_BATCH_SIZE
 # Sync config keys (flat under config["sync"] — same as RSS/Web custom fields).
 SYNC_ROOT_PATH_KEY = "sync_root_path"
 INCLUDE_SUBFOLDERS_KEY = "include_subfolders"
-OBSIDIAN_VAULT_KEY = "obsidian_vault"
-# Largest note the link pass reads. Bigger files are not notes anyone writes by
-# hand, and the pass fetches every changed note over the desktop relay.
-OBSIDIAN_MAX_NOTE_BYTES = 2 * 1024 * 1024
 LOCAL_FS_STORAGE_PATH_PREFIX = "storage://"
 # No total timeout on storage reads/writes for Local FS: large desktop sync
 # payloads and slow links are expected (aligns with Node batch proxy timeout: 0).
@@ -385,13 +378,6 @@ def _parse_sync_bool(raw: JsonValue, default: bool) -> bool:
     return default
 
 
-def _parse_obsidian_vault(config: Dict[str, JsonValue] | None) -> bool:
-    sync_cfg = (config or {}).get("sync", {}) or {}
-    return _parse_sync_bool(
-        _get_sync_config_value(sync_cfg, OBSIDIAN_VAULT_KEY, False), False
-    )
-
-
 def _parse_sync_settings(
     config: Dict[str, JsonValue] | None,
 ) -> Tuple[str, bool, int]:
@@ -425,8 +411,8 @@ def _client_path_for_display(raw: str) -> Path:
 
 
 class LocalFsApp(App):
-    def __init__(self, connector_id: str) -> None:
-        super().__init__(Connectors.LOCAL_FS, AppGroups.LOCAL_STORAGE, connector_id)
+    def __init__(self, connector_id: str, connector: Connectors = Connectors.LOCAL_FS) -> None:
+        super().__init__(connector, AppGroups.LOCAL_STORAGE, connector_id)
 
 
 @(
@@ -492,20 +478,6 @@ class LocalFsApp(App):
                 description="Recurse into subdirectories when syncing.",
             )
         )
-        .add_sync_custom_field(
-            CustomField(
-                name=OBSIDIAN_VAULT_KEY,
-                display_name="Obsidian vault",
-                field_type="BOOLEAN",
-                required=False,
-                default_value="false",
-                description=(
-                    "The folder is an Obsidian vault: keep the links between notes "
-                    "([[wikilinks]] and embeds) in the knowledge graph, and skip "
-                    "the .obsidian and .trash folders."
-                ),
-            )
-        )
         .add_sync_custom_field(CommonFields.batch_size_field())
         .add_filter_field(
             CommonFields.modified_date_filter(
@@ -520,6 +492,36 @@ class LocalFsApp(App):
 class LocalFsConnector(BaseConnector):
     """Local FS: ingest runs on the connector host when the path is readable."""
 
+    # Subclasses that reuse the desktop pull (Obsidian) override these and the
+    # ``_on_*`` hooks below; everything else about the transport is shared.
+    CONNECTOR: Connectors = Connectors.LOCAL_FS
+    # Name the filter config and the sync point are stored under.
+    CONNECTOR_KEY: str = "localfs"
+    RECORD_GROUP_PREFIX: str = "local_fs"
+
+    def _skip_rel_path(self, rel_path: str) -> bool:
+        """True for a path this connector never stores (file or folder)."""
+        return False
+
+    def _record_name_for(self, rel_path: str) -> str:
+        return Path(rel_path).name or "file"
+
+    def _on_file_upserted(self, rel_path: str, old_rel_path: str) -> None:
+        """Called for every file record a batch writes (create, change, move)."""
+
+    def _on_file_deleted(self, rel_path: str) -> None:
+        """Called for every file DELETED event a batch applies."""
+
+    def _on_run_restarted(self) -> None:
+        """The run restarted as FULL; anything collected so far is void."""
+
+    async def _on_run_complete(self, mode: str) -> None:
+        """Called once a run's records and sync point are stored."""
+
+    async def _transform_content(self, record: FileRecord, content: bytes) -> bytes:
+        """Bytes handed to indexing for a record; unchanged for Local FS."""
+        return content
+
     def __init__(
         self,
         logger: Logger,
@@ -531,7 +533,7 @@ class LocalFsConnector(BaseConnector):
         created_by: str,
     ) -> None:
         super().__init__(
-            LocalFsApp(connector_id),
+            LocalFsApp(connector_id, self.CONNECTOR),
             logger,
             data_entities_processor,
             data_store_provider,
@@ -540,11 +542,10 @@ class LocalFsConnector(BaseConnector):
             scope,
             created_by,
         )
-        self.connector_name = Connectors.LOCAL_FS
+        self.connector_name = self.CONNECTOR
         self.connector_id = connector_id
         self.sync_root_path: str = ""
         self.include_subfolders: bool = True
-        self.obsidian_vault: bool = False
         self.batch_size: int = 50
         self._owner_user_for_permissions: Optional[User] = None
         # Seeded here so the memoization in _storage_base_url/_storage_token
@@ -578,7 +579,6 @@ class LocalFsConnector(BaseConnector):
             self.sync_root_path = root
             self.include_subfolders = include_subfolders
             self.batch_size = batch_size
-            self.obsidian_vault = _parse_obsidian_vault(config)
 
             if not root:
                 self.logger.info(
@@ -598,7 +598,7 @@ class LocalFsConnector(BaseConnector):
         return None
 
     def _record_group_external_id(self) -> str:
-        return f"local_fs:{self.connector_id}"
+        return f"{self.RECORD_GROUP_PREFIX}:{self.connector_id}"
 
     def _external_record_id_for_rel_path(self, rel_path: str) -> str:
         # NFC normalization so macOS HFS+/APFS NFD paths and user-space NFC
@@ -621,7 +621,6 @@ class LocalFsConnector(BaseConnector):
         self.sync_root_path = root
         self.include_subfolders = include_subfolders
         self.batch_size = batch_size
-        self.obsidian_vault = _parse_obsidian_vault(config)
 
     @staticmethod
     def _parse_user_from_graph_result(
@@ -1299,7 +1298,7 @@ class LocalFsConnector(BaseConnector):
             if "/" in normalized_rel_path
             else None
         )
-        name = Path(normalized_rel_path).name or "file"
+        name = self._record_name_for(normalized_rel_path)
         timestamp_ms = int(event.timestamp)
         file_time_ms = _event_file_time_ms(event)
         created_time_ms = _event_created_time_ms(event)
@@ -1500,7 +1499,6 @@ class LocalFsConnector(BaseConnector):
         root_for_display: Path,
         emitted_folder_paths: set[str],
         seen_external_ids: Optional[set[str]] = None,
-        changed_notes: Optional[set[str]] = None,
     ) -> LocalFsFileEventBatchStats:
         """Apply one page of file-event metadata pulled from the desktop.
 
@@ -1611,10 +1609,7 @@ class LocalFsConnector(BaseConnector):
                 skipped += 1
                 continue
 
-            if self.obsidian_vault and is_vault_internal(rel_path):
-                # Obsidian's settings, plugins and trash are not vault content.
-                # Records an earlier run made for them are retired by the next
-                # full sync's prune, which never sees them now.
+            if self._skip_rel_path(rel_path):
                 skipped += 1
                 continue
 
@@ -1674,6 +1669,7 @@ class LocalFsConnector(BaseConnector):
                 continue
 
             if event_type == "DELETED":
+                self._on_file_deleted(rel_path)
                 delete_only_buffer.append(
                     self._external_record_id_for_rel_path(rel_path)
                 )
@@ -1753,9 +1749,7 @@ class LocalFsConnector(BaseConnector):
                 owner=owner,
             )
 
-            if changed_notes is not None and is_note(rel_path):
-                changed_notes.add(rel_path)
-
+            self._on_file_upserted(rel_path, old_rel_path)
             prev_kind = kind
             if old_ext_id:
                 move_buffer.append((old_ext_id, file_record, file_permissions))
@@ -1942,7 +1936,9 @@ class LocalFsConnector(BaseConnector):
             return await self._stream_storage_record(record, storage_document_id)
 
         try:
-            content = await self._fetch_desktop_content(record)
+            content = await self._transform_content(
+                record, await self._fetch_desktop_content(record)
+            )
         except LocalFsDesktopRemoteError as exc:
             if not exc.retryable:
                 # A file the desktop can no longer read is terminal for this
@@ -1990,7 +1986,7 @@ class LocalFsConnector(BaseConnector):
 
     def _sync_point_key(self) -> str:
         return generate_record_sync_point_key(
-            RecordType.FILE.value, "localfs", self.connector_id
+            RecordType.FILE.value, self.CONNECTOR_KEY, self.connector_id
         )
 
     async def _write_sync_point(
@@ -2133,113 +2129,6 @@ class LocalFsConnector(BaseConnector):
                 )
             )
         return [e for e in stale if e not in failed], failed
-
-    @staticmethod
-    def _vault_rel_path(record: Record) -> Optional[str]:
-        if not isinstance(record, FileRecord) or not record.is_file:
-            return None
-        raw = record.local_fs_relative_path or record.path
-        if not raw or raw.startswith(LOCAL_FS_STORAGE_PATH_PREFIX):
-            return None
-        return unicodedata.normalize("NFC", raw.strip().replace("\\", "/"))
-
-    async def _apply_obsidian_links(self, changed_notes: set[str]) -> None:
-        """Store the links of the notes this run wrote as edges between records.
-
-        Runs once the run's records are all stored, so a link to a note that
-        arrived on a later page still resolves. Each changed note is read from
-        the desktop, its ``[[links]]`` resolved against every file of the vault,
-        and its link edges replaced: LINKED_TO for a link, RELATED for an embed.
-        Only links to files that exist are stored; Obsidian's unresolved links
-        make no placeholder records.
-
-        Never fails the sync: the files are indexed either way, and a note whose
-        links could not be read keeps the edges it had until it changes again
-        or a full sync reads it.
-        """
-        status_filters = [status.value for status in ProgressStatus]
-        by_path: dict[str, Record] = {}
-        offset = 0
-        try:
-            while True:
-                records = await self.data_entities_processor.get_records_by_status(
-                    self.connector_id,
-                    status_filters,
-                    limit=FULL_SYNC_RESET_BATCH_SIZE,
-                    offset=offset,
-                )
-                if not records:
-                    break
-                for record in records:
-                    rel_path = self._vault_rel_path(record)
-                    if rel_path and not getattr(record, "is_placeholder", False):
-                        by_path[rel_path] = record
-                offset += len(records)
-        except Exception as exc:
-            self.logger.warning("Local FS: Obsidian links skipped, records could not be listed: %s", exc)
-            return
-
-        index = VaultIndex(by_path.keys())
-        updates: list[tuple[Record, list[RelatedExternalRecord]]] = []
-        unresolved = 0
-        failed = 0
-        for rel_path in sorted(changed_notes):
-            note = by_path.get(unicodedata.normalize("NFC", rel_path))
-            if note is None:
-                # Deleted or moved away later in the run.
-                continue
-            if (getattr(note, "size_in_bytes", 0) or 0) > OBSIDIAN_MAX_NOTE_BYTES:
-                continue
-            try:
-                content = await self._fetch_desktop_content(note)
-            except LocalFsDesktopOfflineError:
-                self.logger.warning(
-                    "Local FS: desktop went offline during the Obsidian link pass; "
-                    "%d note(s) keep their previous links",
-                    len(changed_notes) - len(updates),
-                )
-                break
-            except Exception as exc:
-                failed += 1
-                self.logger.warning("Local FS: could not read %s for its links: %s", rel_path, exc)
-                continue
-
-            related: list[RelatedExternalRecord] = []
-            seen_targets: set[tuple[str, bool]] = set()
-            for link in parse_links(content.decode("utf-8", errors="replace")):
-                target_path = index.resolve(link.target, rel_path)
-                if target_path is None:
-                    unresolved += 1
-                    continue
-                target = by_path[target_path]
-                if target.id == note.id or (target.id, link.embed) in seen_targets:
-                    continue
-                seen_targets.add((target.id, link.embed))
-                related.append(
-                    RelatedExternalRecord(
-                        external_record_id=target.external_record_id,
-                        record_type=RecordType.FILE,
-                        record_name=target.record_name,
-                        relation_type=(
-                            RecordRelations.RELATED if link.embed else RecordRelations.LINKED_TO
-                        ),
-                    )
-                )
-            updates.append((note, related))
-
-        if updates:
-            try:
-                await self.data_entities_processor.on_related_records_update(updates)
-            except Exception as exc:
-                self.logger.warning("Local FS: Obsidian links could not be stored: %s", exc)
-                return
-        self.logger.info(
-            "Local FS: Obsidian links stored for %d note(s) (%d edge(s), %d unresolved, %d unreadable)",
-            len(updates),
-            sum(len(related) for _note, related in updates),
-            unresolved,
-            failed,
-        )
 
     async def _notify_root_unavailable(
         self, exc: LocalFsRootUnavailableError
@@ -2492,9 +2381,6 @@ class LocalFsConnector(BaseConnector):
         # FULL run prunes against it, and every run uses it to keep a pending
         # deletion from removing a file that has since come back.
         seen_external_ids: set[str] = set()
-        # Obsidian notes this run wrote, whose links are read once the run's
-        # records are all stored.
-        changed_notes: Optional[set[str]] = set() if self.obsidian_vault else None
         processed = 0
         deleted = 0
         skipped = 0
@@ -2516,7 +2402,7 @@ class LocalFsConnector(BaseConnector):
                 root_for_display
             )
             sync_filters, indexing_filters = await load_connector_filters(
-                self.config_service, "localfs", self.connector_id, self.logger
+                self.config_service, self.CONNECTOR_KEY, self.connector_id, self.logger
             )
             timeout = aiohttp.ClientTimeout(total=LOCAL_FS_PULL_HTTP_TIMEOUT_SECONDS)
             async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -2543,6 +2429,7 @@ class LocalFsConnector(BaseConnector):
                             cursor,
                         )
                         restarted_as_full = True
+                        self._on_run_restarted()
                         mode = "FULL"
                         cursor = None
                         # The old baseline is unusable, so the sync point must
@@ -2555,8 +2442,6 @@ class LocalFsConnector(BaseConnector):
                         # The restart re-crawls from scratch, so what the
                         # abandoned attempt applied no longer counts.
                         seen_external_ids = set()
-                        if changed_notes is not None:
-                            changed_notes = set()
                         continue
                     stats = await self._apply_file_event_batch(
                         batch.events,
@@ -2567,7 +2452,6 @@ class LocalFsConnector(BaseConnector):
                         root_for_display=root_for_display,
                         emitted_folder_paths=emitted_folder_paths,
                         seen_external_ids=seen_external_ids,
-                        changed_notes=changed_notes,
                     )
                     processed += stats.processed
                     deleted += stats.deleted
@@ -2676,8 +2560,7 @@ class LocalFsConnector(BaseConnector):
                 pending_deletions=carry_forward,
                 deletions_overflowed=overflow_pending,
             )
-            if changed_notes:
-                await self._apply_obsidian_links(changed_notes)
+            await self._on_run_complete(mode)
             self.logger.info(
                 "Local FS: %s sync complete (run=%s batches=%d processed=%d "
                 "deleted=%d skipped=%d failed_deletions=%d)",
@@ -2774,7 +2657,7 @@ class LocalFsConnector(BaseConnector):
         data_entities_processor,
         **kwargs,
     ) -> "LocalFsConnector":
-        return LocalFsConnector(
+        return cls(
             logger,
             data_entities_processor,
             data_store_provider,

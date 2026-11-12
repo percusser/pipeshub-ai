@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from '@/lib/navigation';
 import { Flex, Box, Text, Badge, Button } from '@radix-ui/themes';
 import { ConnectorIcon } from '@/app/components/ui/ConnectorIcon';
-import { isLocalFsConnectorType } from '@/app/(main)/workspace/connectors/utils/local-fs-helpers';
+import { isDesktopFolderConnectorType } from '@/app/(main)/workspace/connectors/utils/local-fs-helpers';
 import { openRecordSource } from '@/chat/utils/open-record-source';
 import { getConnectorConfig } from './utils';
 import { FileIcon } from '@/app/components/ui/file-icon';
@@ -31,7 +31,7 @@ function CitationPopoverContentInner({
 
   // Determine if this is a collection (UPLOAD) or external connector source
   const isCollectionSource = citation.origin === 'UPLOAD';
-  const isLocalFsSource = isLocalFsConnectorType(citation.connector ?? '');
+  const isLocalFsSource = isDesktopFolderConnectorType(citation.connector ?? '');
   const openInLabel = isCollectionSource
     ? t('chat.recordActions.openInCollections')
     : t('chat.recordActions.openIn', { source: config.label });

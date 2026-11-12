@@ -184,6 +184,24 @@ describe('useEnsureLocalWatcher', () => {
   });
 
   describe('mounting the watcher for the owner device', () => {
+    it('mounts an Obsidian vault the same way as a Local FS folder', async () => {
+      const ref = makeRef([]);
+
+      await ensure(makeInstance({ type: 'Obsidian', name: 'My Vault' }), ref);
+
+      expect(mockStart.mock.calls).toEqual([
+        [
+          {
+            connectorId: 'c1',
+            connectorName: 'My Vault',
+            rootPath: '/home/me/Docs',
+            syncStrategy: 'MANUAL',
+          },
+        ],
+      ]);
+      expect(ref.current.has('c1')).toBe(true);
+    });
+
     it('starts, records the status and tracks the id', async () => {
       const ref = makeRef([]);
 

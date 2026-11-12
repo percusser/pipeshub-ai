@@ -10785,7 +10785,7 @@ class ArangoHTTPProvider(NamedEntityGraphMixin, IGraphDBProvider):
                 return await self.delete_gmail_record(record_id, user_id, record, transaction, soft_delete=soft_delete, delete_source=delete_source)
             elif connector_name in (Connectors.OUTLOOK.value, Connectors.OUTLOOK_INDIVIDUAL.value):
                 return await self.delete_outlook_record(record_id, user_id, record, transaction, soft_delete=soft_delete, delete_source=delete_source)
-            elif connector_name == Connectors.LOCAL_FS.value:
+            elif connector_name in (Connectors.LOCAL_FS.value, Connectors.OBSIDIAN.value):
                 return await self.delete_local_fs_record(record_id, user_id, record, transaction, soft_delete=soft_delete, delete_source=delete_source)
             else:
                 return {
@@ -12654,7 +12654,7 @@ class ArangoHTTPProvider(NamedEntityGraphMixin, IGraphDBProvider):
             try:
                 payload = await self._create_deleted_record_event_payload(record, file_record)
                 if payload:
-                    payload["connectorName"] = Connectors.LOCAL_FS.value
+                    payload["connectorName"] = record.get("connectorName") or Connectors.LOCAL_FS.value
                     payload["origin"] = OriginTypes.CONNECTOR.value
                     event_data = {
                         "eventType": "deleteRecord",
@@ -12670,7 +12670,7 @@ class ArangoHTTPProvider(NamedEntityGraphMixin, IGraphDBProvider):
             return {
                 "success": True,
                 "record_id": record_id,
-                "connector": Connectors.LOCAL_FS.value,
+                "connector": record.get("connectorName") or Connectors.LOCAL_FS.value,
                 "eventData": event_data
             }
 

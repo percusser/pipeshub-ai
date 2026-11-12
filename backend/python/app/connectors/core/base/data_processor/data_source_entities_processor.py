@@ -3156,7 +3156,7 @@ class DataSourceEntitiesProcessor:
     ) -> None:
         """Replace the link edges of records already stored, and nothing else.
 
-        For a connector that learns a record's links after saving it: Local FS
+        For a connector that learns a record's links after saving it: Obsidian
         reads an Obsidian note's ``[[links]]`` once every note of the run is in
         the graph, so a link to a note on a later page still resolves. Each
         record's link edges (``LINK_RELATION_TYPES``) are replaced by the given

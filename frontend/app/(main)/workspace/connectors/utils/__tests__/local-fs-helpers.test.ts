@@ -2,8 +2,10 @@ import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
 import { i18n } from '@/lib/i18n';
 import { isElectron } from '@/lib/electron';
 import {
+  isDesktopFolderConnectorType,
   isDesktopOfflineError,
   isLocalFsConfigReadOnly,
+  isLocalFsConnectorType,
   localFsDesktopToast,
   readDesktopRefusal,
 } from '../local-fs-helpers';
@@ -158,9 +160,51 @@ describe('isLocalFsConfigReadOnly', () => {
     expect(isLocalFsConfigReadOnly('LOCAL_FS')).toBe(false);
   });
 
+  it('is read-only for an Obsidian connector opened in the browser', () => {
+    mockIsElectron.mockReturnValue(false);
+    expect(isLocalFsConfigReadOnly('OBSIDIAN')).toBe(true);
+    expect(isLocalFsConfigReadOnly('Obsidian')).toBe(true);
+    mockIsElectron.mockReturnValue(true);
+    expect(isLocalFsConfigReadOnly('Obsidian')).toBe(false);
+  });
+
   it('never gates a non Local FS connector', () => {
     mockIsElectron.mockReturnValue(false);
     expect(isLocalFsConfigReadOnly('GOOGLE_DRIVE')).toBe(false);
     expect(isLocalFsConfigReadOnly('')).toBe(false);
+  });
+});
+
+describe('isLocalFsConnectorType', () => {
+  it('matches every backend spelling of Local FS', () => {
+    for (const type of ['Local FS', 'LOCAL_FS', 'local-fs', 'localfs', 'localfilesystem', ' Local File System ']) {
+      expect(isLocalFsConnectorType(type)).toBe(true);
+    }
+  });
+
+  it('does not match Obsidian or other connectors', () => {
+    expect(isLocalFsConnectorType('Obsidian')).toBe(false);
+    expect(isLocalFsConnectorType('GOOGLE_DRIVE')).toBe(false);
+    expect(isLocalFsConnectorType('')).toBe(false);
+  });
+});
+
+describe('isDesktopFolderConnectorType', () => {
+  it('matches Local FS in every backend spelling', () => {
+    for (const type of ['Local FS', 'LOCAL_FS', 'local-fs', 'localfs', 'localfilesystem']) {
+      expect(isDesktopFolderConnectorType(type)).toBe(true);
+    }
+  });
+
+  it('matches Obsidian in every backend spelling', () => {
+    for (const type of ['Obsidian', 'OBSIDIAN', 'obsidian', ' obsidian ']) {
+      expect(isDesktopFolderConnectorType(type)).toBe(true);
+    }
+  });
+
+  it('rejects cloud connectors and empty input', () => {
+    for (const type of ['GOOGLE_DRIVE', 'Notion', 'obsidian-cloud', '']) {
+      expect(isDesktopFolderConnectorType(type)).toBe(false);
+    }
   });
 });

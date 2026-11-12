@@ -9,6 +9,7 @@ import {
   annotateLocalFsDesktopPresence,
   respondLocalFsDesktopRefusal,
   localFsRefusalFromBackend,
+  localFsSyncRefusal,
   DESKTOP_OFFLINE_CODE,
   DESKTOP_OWNED_BY_OTHER_DEVICE_CODE,
   DESKTOP_UNCLAIMED_CODE,
@@ -25,6 +26,7 @@ import {
   TooManyRequestsError,
   UnprocessableEntityError,
 } from '../../../../src/libs/errors/http.errors'
+import { registerDesktopPresence } from '../../../../src/libs/services/desktop-presence.provider'
 
 describe('tokens_manager/utils/connector.utils', () => {
   afterEach(() => {
@@ -384,6 +386,74 @@ describe('tokens_manager/utils/connector.utils - Local FS desktop presence', () 
 
       expect(noOwner.connector).to.not.have.property('desktopOnline')
       expect(p.isLocalFsDeviceOnline.called).to.be.false
+    })
+  })
+
+  describe('annotateLocalFsDesktopPresence (Obsidian)', () => {
+    it('stamps desktopOnline on Obsidian rows like Local FS', () => {
+      const p = {
+        isLocalFsDeviceOnline: sinon.stub().returns(false),
+        isDesktopConnected: sinon.stub().returns(null),
+      }
+      const body = {
+        connector: {
+          _key: 'o1',
+          type: 'Obsidian',
+          createdBy: 'owner-1',
+          isActive: true,
+          ownerDeviceId: 'dev-a',
+        },
+      }
+
+      annotateLocalFsDesktopPresence(body, 'org-1', p)
+
+      expect(body.connector).to.have.property('desktopOnline', false)
+      expect(p.isLocalFsDeviceOnline.calledOnceWithExactly('org-1', 'owner-1', 'dev-a')).to.be.true
+    })
+  })
+
+  describe('localFsSyncRefusal', () => {
+    const online = sinon.stub()
+    beforeEach(() => {
+      online.reset()
+      registerDesktopPresence({
+        isLocalFsDeviceOnline: online,
+        isDesktopConnected: sinon.stub().returns(null),
+      })
+    })
+    afterEach(() => registerDesktopPresence(null))
+
+    const instance = (type: string, ownerDeviceId: string | null = null) =>
+      ({ type, createdBy: 'owner-1', ownerDeviceId }) as any
+
+    ;['Local FS', 'Obsidian'].forEach((type) => {
+      describe(type, () => {
+        it('refuses an unowned connector without a request device as unclaimed', () => {
+          expect(localFsSyncRefusal('org-1', instance(type))).to.equal('unclaimed')
+        })
+
+        it('refuses a different request device as other_device', () => {
+          expect(
+            localFsSyncRefusal('org-1', instance(type, 'dev-a'), { requestDeviceId: 'dev-b' }),
+          ).to.equal('other_device')
+        })
+
+        it('refuses when the owner device is offline', () => {
+          online.returns(false)
+          expect(localFsSyncRefusal('org-1', instance(type, 'dev-a'))).to.equal('offline')
+          expect(online.calledOnceWithExactly('org-1', 'owner-1', 'dev-a')).to.be.true
+        })
+
+        it('lets an online owner device through', () => {
+          online.returns(true)
+          expect(localFsSyncRefusal('org-1', instance(type, 'dev-a'))).to.equal(null)
+        })
+      })
+    })
+
+    it('never refuses non-desktop connectors', () => {
+      expect(localFsSyncRefusal('org-1', instance('Slack'))).to.equal(null)
+      expect(online.called).to.be.false
     })
   })
 

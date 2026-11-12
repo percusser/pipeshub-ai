@@ -2,7 +2,7 @@
 
 import { KnowledgeBaseApi } from '@/knowledge-base/api';
 import type { RecordDetailsResponse } from '@/knowledge-base/types';
-import { isLocalFsConnectorType } from '@/app/(main)/workspace/connectors/utils/local-fs-helpers';
+import { isDesktopFolderConnectorType } from '@/app/(main)/workspace/connectors/utils/local-fs-helpers';
 import { withCurrentOrgId } from '@/lib/navigation';
 
 interface ElectronLocalFsOpenPayload {
@@ -90,7 +90,7 @@ export async function openRecordSource(
   const electronApi = deps.electronApi ?? getElectronApi();
   const fallbackUrl = getDefaultFallbackUrl(input);
 
-  if (!isLocalFsConnectorType(input.connector ?? '')) {
+  if (!isDesktopFolderConnectorType(input.connector ?? '')) {
     if (input.webUrl && !input.hideWeburl) {
       openFallbackUrl(input.webUrl, deps, electronApi);
       return { opened: 'web', url: input.webUrl };

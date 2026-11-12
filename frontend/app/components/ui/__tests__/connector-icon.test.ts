@@ -17,4 +17,10 @@ describe('resolveConnectorType', () => {
     expect(resolveConnectorType('Docs')).toBe('google-docs');
     expect(resolveConnectorType('drive')).toBe('google-drive');
   });
+
+  it('gives Obsidian its own icon and keeps Local FS on the folder icon', () => {
+    expect(resolveConnectorType('Obsidian')).toBe('obsidian');
+    expect(resolveConnectorType('OBSIDIAN')).toBe('obsidian');
+    expect(resolveConnectorType('Local FS')).toBe('local-fs');
+  });
 });

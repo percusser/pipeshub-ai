@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { Flex, Box, Text, Badge, Button } from '@radix-ui/themes';
 import { useIsMobile } from '@/lib/hooks/use-is-mobile';
 import { ConnectorIcon } from '@/app/components/ui/ConnectorIcon';
-import { isLocalFsConnectorType } from '@/app/(main)/workspace/connectors/utils/local-fs-helpers';
+import { isDesktopFolderConnectorType } from '@/app/(main)/workspace/connectors/utils/local-fs-helpers';
 import { openRecordSource } from '@/chat/utils/open-record-source';
 import { getConnectorConfig, formatSyncLabel } from '../message-area/response-tabs/citations/utils';
 import type { SearchResultItem } from '@/chat/types';
@@ -29,7 +29,7 @@ export function SearchResultCard({
   const syncLabel = formatSyncLabel(metadata.updatedAt);
 
   const isCollectionSource = metadata.origin === 'UPLOAD';
-  const isLocalFsSource = isLocalFsConnectorType(metadata.connector ?? '');
+  const isLocalFsSource = isDesktopFolderConnectorType(metadata.connector ?? '');
   let openInLabel = t('chat.recordActions.open', { source: config.label });
   if (isLocalFsSource) openInLabel = t('chat.recordActions.openIn', { source: config.label });
   if (isCollectionSource) openInLabel = t('chat.recordActions.openInCollections');

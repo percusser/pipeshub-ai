@@ -170,6 +170,12 @@ describe('runConnectorResync', () => {
     expect(card()?.status).toBe('IDLE');
   });
 
+  it('reports an Obsidian connector whose desktop app is offline instead of throwing', async () => {
+    fakeApi({ [`POST ${BASE}/c1/resync`]: desktopRefusal(LOCAL_FS_DESKTOP_OFFLINE, 'Studio Mac') });
+    const outcome = await runConnectorResync({ connectorId: 'c1', connectorType: 'Obsidian' });
+    expect(outcome).toEqual({ kind: 'requires-desktop', reason: 'offline', ownerDeviceName: 'Studio Mac' });
+  });
+
   it('does not treat the desktop code as special for other connector types', async () => {
     fakeApi({ [`POST ${BASE}/c1/resync`]: desktopRefusal(LOCAL_FS_DESKTOP_OFFLINE) });
     await expect(runConnectorResync({ connectorId: 'c1', connectorType: 'Google Drive' })).rejects.toBeDefined();
@@ -205,6 +211,17 @@ describe('toggleConnectorSyncOn', () => {
     const outcome = await toggleConnectorSyncOn('c1', 'Local FS');
     expect(outcome).toEqual({ kind: 'requires-desktop', reason: 'other_device', ownerDeviceName: 'Office PC' });
     expect(desktop.stop).toHaveBeenCalledWith('c1');
+  });
+
+  it('sends this desktop as the owner when enabling an Obsidian vault in the app', async () => {
+    const desktop = installDesktop();
+    useConnectorsStore.getState().setInstanceConfig('c1', { config: { sync: { values: { sync_root_path: '/Users/ada/Vault' } } } } as never);
+    const api = fakeApi({ [`POST ${BASE}/c1/toggle`]: { status: 200 } });
+
+    expect(await toggleConnectorSyncOn('c1', 'Obsidian')).toEqual({ kind: 'backend' });
+
+    expect(desktop.checkRootPathConflict).toHaveBeenCalledWith('c1', '/Users/ada/Vault');
+    expect(api.sent[0].body).toEqual({ type: 'sync', deviceId: 'dev-1', deviceName: 'Ada’s laptop' });
   });
 
   it('sends no device for an ordinary connector', async () => {

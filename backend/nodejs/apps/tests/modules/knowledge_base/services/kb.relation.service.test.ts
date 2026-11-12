@@ -297,6 +297,29 @@ describe('RecordRelationService', () => {
       expect(payload).to.have.property('connectorId', 'conn-2')
       expect(payload).to.have.property('fullSync', true)
     })
+
+    ;[
+      ['Local FS', 'localfs'],
+      ['Obsidian', 'obsidian'],
+    ].forEach(([name, key]) => {
+      it(`maps desktop-folder connector "${name}" to its factory key`, async () => {
+        const service = new RecordRelationService(
+          mockSyncEventProducer,
+          mockDefaultConfig,
+        )
+        await new Promise(resolve => setTimeout(resolve, 10))
+
+        const payload = await service.createResyncConnectorEventPayload({
+          connectorName: name,
+          connectorId: 'conn-3',
+          orgId: 'org-1',
+          origin: 'CONNECTOR',
+          fullSync: false,
+        })
+
+        expect(payload).to.have.property('connector', key)
+      })
+    })
   })
 })
 
