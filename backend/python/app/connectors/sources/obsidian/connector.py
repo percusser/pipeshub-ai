@@ -84,6 +84,21 @@ def _norm(path: str) -> str:
     return unicodedata.normalize("NFC", path.strip().replace("\\", "/")).strip("/")
 
 
+_GRAPH_STATE_FIELD = "graphStateJson"
+
+
+def _decode_graph_state(stored: dict | None) -> dict:
+    """The link state saved by the last run, as one JSON string property."""
+    raw = (stored or {}).get(_GRAPH_STATE_FIELD)
+    if not raw:
+        return {}
+    try:
+        state = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
 @(
     ConnectorBuilder(OBSIDIAN_CONNECTOR_NAME)
     .in_group(AppGroups.LOCAL_STORAGE.value)
@@ -146,6 +161,8 @@ def _norm(path: str) -> str:
     )
     .build_decorator()
 )
+
+
 class ObsidianConnector(LocalFsConnector):
     CONNECTOR = Connectors.OBSIDIAN
     CONNECTOR_KEY = "obsidian"
@@ -288,7 +305,9 @@ class ObsidianConnector(LocalFsConnector):
             return
         by_path = await self._list_vault_records()
 
-        state = {} if mode == "FULL" else await self.record_sync_point.read_sync_point(self._graph_state_key())
+        state = {} if mode == "FULL" else _decode_graph_state(
+            await self.record_sync_point.read_sync_point(self._graph_state_key())
+        )
         aliases: dict[str, list[str]] = dict(state.get("aliases") or {})
         # source note -> link targets as written that resolved to nothing
         unresolved: dict[str, list[str]] = dict(state.get("unresolved") or {})
@@ -412,7 +431,8 @@ class ObsidianConnector(LocalFsConnector):
             await self.data_entities_processor.on_related_records_update(updates)
         await self.record_sync_point.update_sync_point(
             self._graph_state_key(),
-            {"aliases": aliases, "unresolved": unresolved, "links": links},
+            # Neo4j stores only primitive properties, never a map of lists.
+            {_GRAPH_STATE_FIELD: json.dumps({"aliases": aliases, "unresolved": unresolved, "links": links})},
         )
         self.logger.info(
             "Obsidian: links stored for %d note(s): %d edge(s), %d to notes not created yet",

@@ -16,7 +16,7 @@ from app.connectors.sources.local_fs.connector import (
     LocalFsDesktopOfflineError,
 )
 from app.connectors.sources.local_fs.models import LocalFsFileEvent
-from app.connectors.sources.obsidian.connector import ObsidianConnector
+from app.connectors.sources.obsidian.connector import ObsidianConnector, _decode_graph_state
 from app.connectors.sources.obsidian.vault import (
     ExcludeFilters,
     NoteLink,
@@ -246,6 +246,12 @@ def vault() -> ObsidianConnector:
         return dict(store.get(key, {}))
 
     async def update(key: str, data: dict[str, Any]) -> None:
+        # Neo4j rejects map-valued properties, as the real sync point store does.
+        for name, value in data.items():
+            items = value if isinstance(value, list) else [value]
+            assert all(v is None or isinstance(v, (str, int, float, bool)) for v in items), (
+                f"sync point property {name!r} is not a Neo4j primitive"
+            )
         store.setdefault(key, {}).update(data)
 
     connector.record_sync_point = MagicMock()
@@ -387,7 +393,8 @@ class TestLinkPass:
         # A's edge now points at the placeholder where B would be recreated.
         (edge,) = updates["A.md"]
         assert edge.external_record_id == _ext(vault, "B.md")
-        assert vault.graph_store[vault._graph_state_key()]["unresolved"] == {"A.md": ["B"]}
+        state = _decode_graph_state(vault.graph_store[vault._graph_state_key()])
+        assert state["unresolved"] == {"A.md": ["B"]}
 
     async def test_moved_target_relinks_its_sources(self, vault: ObsidianConnector) -> None:
         fake = Vault(vault, {"A.md": "[[B]]", "B.md": "", "C.md": "[[Other]]"})
