@@ -361,6 +361,41 @@ class GitHubAsyncRESTClient:
             return
         raise GitHubRateLimitReserveError(resource, remaining, limit, wait_seconds)
 
+    async def download_to_file(
+        self, path: str, dest: str, *, max_bytes: int, chunk_size: int = 1 << 20,
+    ) -> int:
+        """Stream ``GET path`` to ``dest``, following redirects; returns bytes written.
+
+        Built for ``/tarball`` and ``/zipball``: the API answers with a 302 to
+        codeload.github.com carrying its own short-lived token, so httpx drops
+        the Authorization header on that cross-host hop. The API request is
+        charged to ``core`` once; codeload is not rate limited. Raises
+        ``GitHubHTTPError`` on a non-2xx and ``ValueError`` past ``max_bytes``.
+        """
+        self._check_reserve(path)
+        client = self._ensure_client()
+        written = 0
+        async with client.stream("GET", path, headers=self._headers()) as response:
+            # The budget headers ride on the API hop, not on codeload's answer.
+            for hop in (*response.history, response):
+                self._record_budget(hop.headers)
+            if response.status_code >= 400:
+                body = (await response.aread())[:300].decode("utf-8", "replace")
+                raise GitHubHTTPError(
+                    response.status_code, body, headers=response.headers, api_message=body or None,
+                )
+            with open(dest, "wb") as fh:
+                async for chunk in response.aiter_bytes(chunk_size):
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ValueError(f"download of {path} passed {max_bytes} bytes")
+                    fh.write(chunk)
+        return written
+
+    def budget(self, resource: str = "core") -> tuple[int, int, int] | None:
+        """``(limit, remaining, reset epoch)`` last seen for ``resource``."""
+        return self._budgets.get(resource)
+
     async def get_json(
         self,
         path: str,
@@ -515,6 +550,26 @@ class GitHubAsyncDataSource:
     async def get_git_blob(self, owner: str, repo: str, sha: str) -> GitHubResponse:
         """Git Data API blob — serves content the Contents API caps at 1 MB."""
         return await self._get_wrapped(f"/repos/{owner}/{repo}/git/blobs/{sha}")
+
+    async def download_repo_tarball(
+        self, owner: str, repo: str, ref: str, dest: str, *, max_bytes: int,
+    ) -> GitHubResponse:
+        """The whole tree at ``ref`` as a gzipped tarball, written to ``dest``.
+
+        One ``core`` request for every file in the repository, where the Git
+        Blob API costs one per file. ``data`` is the byte count.
+        """
+        try:
+            written = await self._rest.download_to_file(
+                f"/repos/{owner}/{repo}/tarball/{quote(ref, safe='')}", dest, max_bytes=max_bytes,
+            )
+            return GitHubResponse(success=True, data=written)
+        except Exception as e:
+            return self._err(e)
+
+    def rate_limit_budget(self, resource: str = "core") -> tuple[int, int, int] | None:
+        """``(limit, remaining, reset epoch)`` from the latest responses, if any."""
+        return self._rest.budget(resource)
 
     async def get_file_contents(
         self, owner: str, repo: str, path: str, ref: str | None = None,

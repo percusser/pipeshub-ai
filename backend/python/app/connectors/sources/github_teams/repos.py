@@ -42,6 +42,7 @@ or a record's identity. Source timestamps live in ``timestamps.py``.
 from __future__ import annotations
 
 import base64
+import time
 import uuid
 from collections import deque
 from typing import TYPE_CHECKING, Any
@@ -101,6 +102,7 @@ from .models import (
 from .timestamps import TimestampBackfill
 
 if TYPE_CHECKING:
+    from .archive_cache import RepoArchiveCache
     from app.connectors.sources.github_teams.connector import GitHubTeamsConnector
 
 
@@ -133,11 +135,21 @@ def _oversized(file_path: str, repo_name: str, size: int) -> HTTPException:
     )
 
 
+# A tarball of a large repository can take minutes; the default per-call
+# budget is sized for JSON responses.
+_ARCHIVE_DOWNLOAD_TIMEOUT_SECONDS = 900.0
+
+
 class ReposSync:
     """Handles code repository (file/blob) synchronisation for ``GitHubTeamsConnector``."""
 
-    def __init__(self, connector: "GitHubTeamsConnector") -> None:
+    def __init__(
+        self, connector: "GitHubTeamsConnector", archive_cache: RepoArchiveCache | None = None,
+    ) -> None:
         self.c = connector
+        # Serves full-sync file content from one tarball per repo and commit
+        # instead of one Git Blob call per file; None reads every file by API.
+        self.archives = archive_cache
         self.logger = connector.logger
         self.timestamps = TimestampBackfill(connector)
         # Per repo, loaded at the start of each run.
@@ -1087,7 +1099,16 @@ class ReposSync:
                 raise _oversized(file_path, repo.full_name, size)
             if size == 0:
                 return b""
+            content = await self._read_from_archive(repo, repo_id, record, file_path, allow_download=True)
+            if content is not None:
+                return content
             content = await self._fetch_blob_by_sha(repo, record, file_path)
+            if content is not None:
+                return content
+        elif record.file_hash:
+            # An incremental record: served from an archive already on disk
+            # when it holds this blob, never worth a tarball of its own.
+            content = await self._read_from_archive(repo, repo_id, record, file_path, allow_download=False)
             if content is not None:
                 return content
 
@@ -1171,6 +1192,51 @@ class ReposSync:
                 )
             return content
         return b""
+
+    async def _read_from_archive(
+        self, repo: Any, repo_id: int, record: CodeFileRecord, file_path: str, *, allow_download: bool,
+    ) -> bytes | None:
+        """The record's blob from an unpacked repository tarball, or None.
+
+        The archive is the tree at the record's ``commit_sha``, downloaded at
+        most once per repo and commit for every file in it. Bytes are returned
+        only when their git blob sha equals ``record.file_hash``.
+        """
+        cache = self.archives
+        if cache is None or not record.file_hash:
+            return None
+        c = self.c
+        commit_sha = getattr(record, "commit_sha", None)
+        owner, name = repo.owner.login, repo.name
+
+        async def download(dest: str) -> int:
+            res = await c.runtime.ds_call(
+                c.data_source.download_repo_tarball, owner, name, commit_sha, dest,
+                max_bytes=cache.max_archive_bytes, _github_timeout=_ARCHIVE_DOWNLOAD_TIMEOUT_SECONDS,
+            )
+            self._log_core_budget(f"tarball {repo.full_name}@{str(commit_sha)[:12]}")
+            if not res.success:
+                raise RuntimeError(f"HTTP {res.status_code}: {res.error}")
+            return int(res.data or 0)
+
+        try:
+            return await cache.read(
+                repo_id, commit_sha, file_path, record.file_hash,
+                download=download if allow_download and commit_sha else None,
+            )
+        except Exception as e:  # the per-file API is always the fallback
+            self.logger.warning("Archive read failed for %s in %s: %s", file_path, repo.full_name, e)
+            return None
+
+    def _log_core_budget(self, what: str) -> None:
+        budget = getattr(self.c.data_source, "rate_limit_budget", None)
+        seen = budget("core") if callable(budget) else None
+        if isinstance(seen, tuple) and len(seen) == 3:
+            limit, remaining, reset = seen
+            self.logger.info(
+                "GitHub core quota after %s: %s of %s left, resets in %ss",
+                what, remaining, limit, max(0, reset - int(time.time())),
+            )
 
     async def _fetch_blob_by_sha(
         self, repo: Any, record: CodeFileRecord, file_path: str,

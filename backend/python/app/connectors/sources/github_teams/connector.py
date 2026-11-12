@@ -78,8 +78,9 @@ from app.models.entities import Record
 from app.sources.client.github.github import GitHubClient
 from app.sources.external.github.github_async import GitHubAsyncDataSource
 
+from .archive_cache import shared_archive_cache
 from .comments import CommentsHelper
-from .constants import HTTP_UNAUTHORIZED
+from .constants import CODE_FILE_MAX_SIZE_BYTES, HTTP_UNAUTHORIZED
 from .filters import FiltersHelper
 from .issue_reconciler import IssueReconciler
 from .issues import IssuesSync
@@ -259,7 +260,9 @@ class GitHubTeamsConnector(BaseConnector):
         )
         self.users = UsersSync(self)
         self.projects = ProjectsSync(self)
-        self.repos = ReposSync(self)
+        self.repos = ReposSync(
+            self, archive_cache=shared_archive_cache(max_file_bytes=CODE_FILE_MAX_SIZE_BYTES, logger=logger),
+        )
         self.issues = IssuesSync(self)
         self.pull_requests = PullRequestsSync(self)
         self.comments = CommentsHelper(self)
