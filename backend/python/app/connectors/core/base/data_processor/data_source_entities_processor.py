@@ -1035,7 +1035,9 @@ class DataSourceEntitiesProcessor:
                     "parentTableName": getattr(related_ext_record, "parent_table_name", None) or "",
                     "constraintName": getattr(related_ext_record, "constraint_name", None) or "",
                 }
-                
+                if related_ext_record.link_subpaths:
+                    edge["linkSubpaths"] = list(related_ext_record.link_subpaths)
+
                 edges_to_create.append(edge)
 
         # Batch upsert all relation edges at once

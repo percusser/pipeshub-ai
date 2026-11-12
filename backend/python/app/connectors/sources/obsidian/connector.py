@@ -55,6 +55,7 @@ from app.connectors.sources.local_fs.connector import (
 )
 from app.connectors.sources.obsidian.vault import (
     ExcludeFilters,
+    NoteLink,
     VaultIndex,
     is_note,
     is_vault_internal,
@@ -352,27 +353,38 @@ class ObsidianConnector(LocalFsConnector):
         placeholder_count = 0
         for rel_path, note in sorted(parsed.items()):
             source_record = by_path[rel_path]
-            related: list[RelatedExternalRecord] = []
-            seen: set[tuple[str, bool]] = set()
+            # One edge per target and kind; a link into a heading or block of
+            # the target adds that subpath to the edge.
+            edges: dict[tuple[str, bool], RelatedExternalRecord] = {}
             missing: list[str] = []
             resolved_paths: list[str] = []
+
+            def add_edge(
+                ext_id: str, name: str, link: NoteLink,
+                edges: dict[tuple[str, bool], RelatedExternalRecord] = edges,
+            ) -> None:
+                key = (ext_id, link.embed)
+                edge = edges.get(key)
+                if edge is None:
+                    edge = edges[key] = RelatedExternalRecord(
+                        external_record_id=ext_id,
+                        record_type=RecordType.FILE,
+                        record_name=name,
+                        relation_type=RecordRelations.RELATED if link.embed else RecordRelations.LINKED_TO,
+                    )
+                if link.subpath:
+                    subpaths = edge.link_subpaths or []
+                    if link.subpath not in subpaths:
+                        edge.link_subpaths = [*subpaths, link.subpath]
+
             for link in note.links:
-                relation = RecordRelations.RELATED if link.embed else RecordRelations.LINKED_TO
                 target_path = index.resolve(link.target, rel_path)
                 if target_path is not None:
                     target = by_path[target_path]
-                    if target.id == source_record.id or (target.external_record_id, link.embed) in seen:
+                    if target.id == source_record.id:
                         continue
-                    seen.add((target.external_record_id, link.embed))
                     resolved_paths.append(target_path)
-                    related.append(
-                        RelatedExternalRecord(
-                            external_record_id=target.external_record_id,
-                            record_type=RecordType.FILE,
-                            record_name=target.record_name,
-                            relation_type=relation,
-                        )
-                    )
+                    add_edge(target.external_record_id, target.record_name, link)
                     continue
                 missing.append(link.target)
                 if link.embed:
@@ -382,18 +394,10 @@ class ObsidianConnector(LocalFsConnector):
                 if self._skip_rel_path(future_path):
                     continue
                 ext_id = self._external_record_id_for_rel_path(future_path)
-                if (ext_id, False) in seen:
-                    continue
-                seen.add((ext_id, False))
-                placeholder_count += 1
-                related.append(
-                    RelatedExternalRecord(
-                        external_record_id=ext_id,
-                        record_type=RecordType.FILE,
-                        record_name=note_title_from_path(future_path),
-                        relation_type=relation,
-                    )
-                )
+                if (ext_id, False) not in edges:
+                    placeholder_count += 1
+                add_edge(ext_id, note_title_from_path(future_path), link)
+            related = list(edges.values())
             edge_count += len(related)
             updates.append((source_record, related))
             links[rel_path] = sorted(set(resolved_paths))

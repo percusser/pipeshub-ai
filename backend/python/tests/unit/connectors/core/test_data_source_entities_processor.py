@@ -3924,6 +3924,30 @@ class TestHandleRelatedExternalRecordsBatchUpsert:
         assert edge["childTableName"] == "orders"
         assert edge["parentTableName"] == "customers"
         assert edge["constraintName"] == "fk_orders_customer"
+        # Only links into part of a record carry subpaths.
+        assert "linkSubpaths" not in edge
+
+    @pytest.mark.asyncio
+    async def test_link_subpaths_are_stored_on_the_edge(self):
+        proc = _make_processor()
+        tx_store = _make_tx_store()
+        record = _make_record()
+        record.id = "rec-1"
+        related_mock = MagicMock()
+        related_mock.id = "related-id"
+        related_mock.__class__ = Record
+        tx_store.get_record_by_external_id.return_value = related_mock
+
+        rel_ext = RelatedExternalRecord(
+            external_record_id="note-b",
+            record_type=RecordType.FILE,
+            link_subpaths=["Intro", "^abc"],
+        )
+        await proc._handle_related_external_records(record, [rel_ext], tx_store)
+
+        edge = tx_store.batch_upsert_node_relations.call_args[0][0][0]
+        assert edge["relationshipType"] == RecordRelations.LINKED_TO.value
+        assert edge["linkSubpaths"] == ["Intro", "^abc"]
 
     @pytest.mark.asyncio
     async def test_record_name_passed_to_placeholder(self):

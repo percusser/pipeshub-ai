@@ -279,6 +279,24 @@ def render_for_index(note: ParsedNote) -> str:
     return "\n".join(lines) + "\n\n" + note.body.lstrip("\r\n")
 
 
+_HEADER_TAGS = re.compile(r"(?:^|\s)Tags: ((?:#[^\s#]+[ \t]*)+)")
+# How far into an indexed note its properties header can reach.
+_HEADER_SCAN_CHARS = 4000
+
+
+def tags_from_indexed_text(text: str) -> list[str]:
+    """The tags ``render_for_index`` put in a note's header, from its indexed text.
+
+    Indexing sees the note only as the text the connector served, so this is
+    how the tags reach the record's topics. Only the start of the text is read:
+    the header comes first.
+    """
+    match = _HEADER_TAGS.search(text[:_HEADER_SCAN_CHARS])
+    if not match:
+        return []
+    return [tag.lstrip("#") for tag in match.group(1).split() if tag.lstrip("#")]
+
+
 def new_note_path(target: str, source_path: str, settings: Mapping[str, Any] | None) -> str:
     """Where Obsidian creates the note an unresolved ``[[target]]`` names.
 

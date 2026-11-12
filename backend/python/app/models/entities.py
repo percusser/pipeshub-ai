@@ -272,6 +272,9 @@ class RelatedExternalRecord(BaseModel):
     child_table_name: Optional[str] = Field(default=None, description="Child table name (e.g. for SQL foreign keys)")
     parent_table_name: Optional[str] = Field(default=None, description="Parent table name (e.g. for SQL foreign keys)")
     constraint_name: Optional[str] = Field(default=None, description="Constraint name (e.g. FK constraint name)")
+    # Set for a link into part of a note (Obsidian ``[[Note#Heading]]`` /
+    # ``[[Note#^block]]``); stored on the edge as ``linkSubpaths``.
+    link_subpaths: Optional[list[str]] = Field(default=None, description="Headings or block ids within the related record the link points at")
 
 
 class Record(BaseModel):

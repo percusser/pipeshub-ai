@@ -13,10 +13,11 @@ from app.agents.agent_loop.prompt_cache import (
     family_cache_strategy,
     forget_cache_params,
 )
-from app.config.constants.arangodb import DepartmentNames
+from app.config.constants.arangodb import Connectors, DepartmentNames
 from app.exceptions.non_retryable import NonRetryableError
 from app.models.blocks import Block, BlockGroup, BlocksContainer, SemanticMetadata
 from app.models.entities import RecordType
+from app.connectors.sources.obsidian.vault import tags_from_indexed_text
 from app.modules.entity_resolution.languages import canonical_language
 from app.modules.extraction.prompt_template import (
     document_extraction_record_header,
@@ -398,6 +399,33 @@ def find_code_summary_block(blocks: list[Block]) -> Optional[Block]:
             return block
     return None
 
+def _merge_source_tags(record: Any) -> None:  # noqa: ANN401
+    """Add an Obsidian note's own tags to its extracted topics.
+
+    The tags are the author's labels, so they must reach the topic filter
+    whatever the extraction model picked. They are read from the properties
+    header the Obsidian connector puts at the top of the note's text.
+    """
+    metadata = record.semantic_metadata
+    connector = getattr(record, "connector_name", None)
+    if metadata is None or getattr(connector, "value", connector) != Connectors.OBSIDIAN.value:
+        return
+    head = []
+    for block in record.block_containers.blocks[:8]:
+        if isinstance(block.data, str):
+            head.append(block.data)
+    tags = tags_from_indexed_text("\n".join(head))
+    if not tags:
+        return
+    topics = list(metadata.topics or [])
+    seen = {t.casefold() for t in topics if isinstance(t, str)}
+    for tag in tags:
+        if tag.casefold() not in seen:
+            seen.add(tag.casefold())
+            topics.append(tag)
+    metadata.topics = topics
+
+
 class DocumentExtraction(Transformer):
     def __init__(
         self, logger: logging.Logger, graph_provider: IGraphDBProvider, config_service: "ConfigurationService",
@@ -428,6 +456,7 @@ class DocumentExtraction(Transformer):
             self.logger.error("❌ Document extraction failed for record %s: %s", record.id, e)
             record.semantic_metadata = None
             return
+        _merge_source_tags(record)
         self.logger.debug("🎯 Document extraction completed successfully")
 
     def _prepare_content(

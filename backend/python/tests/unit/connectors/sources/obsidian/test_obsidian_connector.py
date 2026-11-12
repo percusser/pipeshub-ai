@@ -29,6 +29,7 @@ from app.connectors.sources.obsidian.vault import (
     parse_tags,
     render_for_index,
     split_frontmatter,
+    tags_from_indexed_text,
 )
 from app.models.entities import FileRecord, RecordGroupType, RecordType, User
 
@@ -122,6 +123,14 @@ class TestNoteParsing:
         assert "status: draft" in rendered
         assert "---" not in rendered
         assert rendered.rstrip().endswith("[[Link]].")
+
+
+def test_tags_round_trip_through_the_indexed_header() -> None:
+    rendered = render_for_index(parse_note("a.md", "---\ntags: [a/b, C]\n---\nbody #d"))
+    assert tags_from_indexed_text(rendered) == ["a/b", "C", "d"]
+    # A markdown parser may fold the header lines into one paragraph.
+    assert tags_from_indexed_text("A Aliases: x Tags: #one #two") == ["one", "two"]
+    assert tags_from_indexed_text("no header") == []
 
 
 class TestVaultIndex:
@@ -332,6 +341,16 @@ class TestLinkPass:
         # A note with no links still gets an update, which clears stale edges.
         assert updates["Sub/C.md"] == []
 
+    async def test_heading_and_block_links_are_kept_on_one_edge(
+        self, vault: ObsidianConnector
+    ) -> None:
+        fake = Vault(vault, {"A.md": "[[B#Intro]] [[B#^abc]] [[B]] ![[B]]", "B.md": ""})
+        updates = await fake.run(changed={"A.md"}, mode="FULL")
+        by_kind = {r.relation_type: r for r in updates["A.md"]}
+        assert set(by_kind) == {RecordRelations.LINKED_TO, RecordRelations.RELATED}
+        assert by_kind[RecordRelations.LINKED_TO].link_subpaths == ["Intro", "^abc"]
+        assert by_kind[RecordRelations.RELATED].link_subpaths is None
+
     async def test_alias_links_resolve(self, vault: ObsidianConnector) -> None:
         fake = Vault(vault, {"A.md": "[[Bee]]", "B.md": "---\naliases: [Bee]\n---\n"})
         updates = await fake.run(changed={"A.md", "B.md"}, mode="FULL")
@@ -473,3 +492,30 @@ class TestConnectorHooks:
         }
         assert written == {"Note", "img.png"}
         assert vault._changed_notes == {"Note.md"}
+
+
+class TestTagsBecomeTopics:
+    @staticmethod
+    def _record(connector: Connectors, text: str, topics: list[str] | None) -> Any:
+        from app.models.blocks import Block, BlockType, SemanticMetadata
+
+        record = MagicMock()
+        record.connector_name = connector
+        record.block_containers.blocks = [Block(type=BlockType.TEXT, data=text)]
+        record.semantic_metadata = SemanticMetadata(topics=topics)
+        return record
+
+    def test_note_tags_are_added_to_extracted_topics(self) -> None:
+        from app.modules.transformers.document_extraction import _merge_source_tags
+
+        text = render_for_index(parse_note("a.md", "---\ntags: [Project/X]\n---\n#ml body"))
+        record = self._record(Connectors.OBSIDIAN, text, ["Machine Learning", "ml"])
+        _merge_source_tags(record)
+        assert record.semantic_metadata.topics == ["Machine Learning", "ml", "Project/X"]
+
+    def test_other_connectors_are_untouched(self) -> None:
+        from app.modules.transformers.document_extraction import _merge_source_tags
+
+        record = self._record(Connectors.LOCAL_FS, "# a\nTags: #x\n\nbody", ["t"])
+        _merge_source_tags(record)
+        assert record.semantic_metadata.topics == ["t"]
